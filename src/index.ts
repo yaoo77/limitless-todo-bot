@@ -128,10 +128,12 @@ async function main() {
           console.error('[processor] Unhandled error', error);
         });
       },
-      {
-        runOnInit: true,
-      },
     );
+
+    // Run immediately on startup
+    processOnce().catch((error) => {
+      console.error('[processor] Initial run error', error);
+    });
 
     const signals: Array<NodeJS.Signals> = ['SIGTERM', 'SIGINT'];
     for (const signal of signals) {
