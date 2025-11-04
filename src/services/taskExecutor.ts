@@ -86,7 +86,7 @@ slackメッセージとして送るので、絵文字や改行を適切に入れ
 
     // Anthropic公式のMCP統合を使用
     const response = await this.anthropic.beta.messages.create({
-      model: 'claude-4-5-haiku-20250514',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 4096,
       system: systemPrompt,
       messages: [
