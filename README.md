@@ -96,9 +96,56 @@ Limitless API → タスク抽出 (GPT-4.1) → タスク実行エージェン�
 Claude Haiku 4.5がAnthropic公式のMCP統合を使用し、利用可能な28個のツールを使ってタスクを自動実行します。
 MCP接続エラー時は自動的に最大3回リトライ（2秒→5秒→10秒の指数バックオフ）します。
 
+### 日次アーカイブ機能 (オプション)
+
+**NEW**: Limitless Lifelogsを日記形式でGitHubリポジトリにアーカイブできます。
+
+機能概要：
+- Lifelogsを時系列でメモリに蓄積
+- 毎日23:59にGitHub Issueを作成
+- GitHub Actionsが自動的に指定リポジトリの`1.01_Diary/limitless_YYYY-MM-DD.md`にアーカイブ
+
+#### 環境変数
+- `ENABLE_DAILY_ARCHIVE="true"` - 日次アーカイブ機能を有効化
+- `GITHUB_TOKEN` - GitHub Personal Access Token (`repo`権限が必要)
+- `GITHUB_OWNER` - GitHubユーザー名
+- `GITHUB_REPO` - アーカイブ先リポジトリ名
+- `GITHUB_BRANCH` - ブランチ名（デフォルト: `main`）
+
+#### GitHub Personal Access Tokenの取得
+1. GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)
+2. "Generate new token (classic)" をクリック
+3. 権限: `repo` (Full control of private repositories) にチェック
+4. トークンをコピーし `GITHUB_TOKEN` に設定
+
+#### GitHub Actionsの設定
+アーカイブ先リポジトリ（例: `yaoo77/obsidian_github`）に以下の設定が必要：
+
+1. **Secretsの追加**:
+   - Settings → Secrets and variables → Actions → New repository secret
+   - Name: `OBSIDIAN_GITHUB_TOKEN`
+   - Value: GitHub Personal Access Token
+
+2. **Actionsの有効化**:
+   - 本リポジトリの `.github/workflows/archive-daily-log.yml` がIssue作成時に自動実行されます
+
+#### ログフォーマット例
+```markdown
+# 2025-11-04 の記録
+
+## 08:30
+朝のミーティングで新プロジェクトの話が出た。
+
+## 10:15
+1on1ミーティング。進捗報告と来週のスケジュール調整。
+
+---
+```
+
 ## 今後の TODO
 - ブラウザ操作ツールの追加 (browser_use など)
 - LLM 応答監査・フォールバック処理の強化
 - タスク実行の並列処理最適化
 - 失敗通知 (Slack / PagerDuty など) の追加
 - タスク実行履歴の保存と分析
+- 日次アーカイブのLLM要約機能（事実・会話・感情の抽出）

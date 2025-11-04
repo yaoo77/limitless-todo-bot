@@ -1,0 +1,41 @@
+name: Archive Daily Log
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  archive:
+    if: contains(github.event.issue.labels.*.name, 'daily-archive')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout obsidian_github repository
+        uses: actions/checkout@v4
+        with:
+          repository: yaoo77/obsidian_github
+          token: ${{ secrets.OBSIDIAN_GITHUB_TOKEN }}
+          path: obsidian_github
+
+      - name: Extract date from issue title
+        id: date
+        run: echo "date=$(echo '${{ github.event.issue.title }}' | grep -oP '\d{4}-\d{2}-\d{2}')" >> $GITHUB_OUTPUT
+
+      - name: Create daily log file
+        run: |
+          mkdir -p obsidian_github/1.01_Diary
+          echo "${{ github.event.issue.body }}" > obsidian_github/1.01_Diary/limitless_${{ steps.date.outputs.date }}.md
+
+      - name: Commit and push to obsidian_github
+        working-directory: obsidian_github
+        run: |
+          git config user.name "Limitless Bot"
+          git config user.email "bot@example.com"
+          git add 1.01_Diary/limitless_${{ steps.date.outputs.date }}.md
+          git commit -m "Archive daily log: ${{ steps.date.outputs.date }}"
+          git push
+
+      - name: Close issue
+        run: gh issue close ${{ github.event.issue.number }} --repo ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

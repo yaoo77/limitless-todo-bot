@@ -10,6 +10,8 @@ import {
   recordProcessedTask,
   upsertLatestEndTime,
 } from './db/repository.js';
+import { DailyLogger } from './services/dailyLogger.js';
+import { GitHubClient } from './services/githubClient.js';
 import { sendTasksToSlack } from './services/slackNotifier.js';
 import { TaskExecutor } from './services/taskExecutor.js';
 import { extractTasksFromLifelogs } from './services/taskExtractor.js';
@@ -17,6 +19,8 @@ import { computeTaskHash } from './utils/hash.js';
 
 const config = loadConfig();
 let taskExecutor: TaskExecutor | null = null;
+let dailyLogger: DailyLogger | null = null;
+let githubClient: GitHubClient | null = null;
 
 async function processOnce(): Promise<void> {
   const lastProcessed = await getLatestEndTime();
@@ -42,6 +46,14 @@ async function processOnce(): Promise<void> {
   }
 
   console.log(`[processor] Processing ${newLifelogs.length} lifelog(s)`);
+
+  // 日次ログ機能が有効な場合、LifelogsをdailyLoggerに追加
+  if (config.enableDailyArchive && dailyLogger) {
+    for (const lifelog of newLifelogs) {
+      dailyLogger.addLifelog(lifelog);
+    }
+    console.log(`[daily-logger] Added ${newLifelogs.length} lifelogs to daily archive`);
+  }
 
   const tasks = await extractTasksFromLifelogs(newLifelogs, config);
   if (tasks.length === 0) {
@@ -157,14 +169,48 @@ function getCronExpression(minutes: number): string {
   return minutes === 1 ? '* * * * *' : `*/${minutes} * * * *`;
 }
 
+/**
+ * 日次アーカイブ処理（23:59に実行）
+ */
+async function archiveDailyLogs(): Promise<void> {
+  if (!config.enableDailyArchive || !dailyLogger || !githubClient) {
+    console.log('[daily-archive] Daily archive is disabled');
+    return;
+  }
+
+  const logCount = dailyLogger.getLogCount();
+  if (logCount === 0) {
+    console.log('[daily-archive] No logs to archive today');
+    return;
+  }
+
+  try {
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const markdown = dailyLogger.generateMarkdown(today);
+
+    console.log(`[daily-archive] Archiving ${logCount} logs for ${today}`);
+
+    const issueNumber = await githubClient.createDailyArchiveIssue(today, markdown);
+    console.log(`[daily-archive] Created issue #${issueNumber} for ${today}`);
+
+    // ログをクリア
+    dailyLogger.clear();
+    console.log('[daily-archive] Daily logs cleared');
+  } catch (error) {
+    console.error('[daily-archive] Failed to archive daily logs:', error);
+  }
+}
+
 async function main() {
   try {
     console.log('[bootstrap] Config loaded:', {
       enableTaskExecution: config.enableTaskExecution,
+      enableDailyArchive: config.enableDailyArchive,
       zapierMcpUrl: config.zapierMcpUrl ? 'SET' : 'NOT SET',
       zapierMcpApiKey: config.zapierMcpApiKey ? 'SET' : 'NOT SET',
+      githubToken: config.githubToken ? 'SET' : 'NOT SET',
     });
-    console.log('[bootstrap] Version: 1.1.0 - GPT-4.1 + Claude Haiku 4.5 + MCP Retry');
+    console.log('[bootstrap] Version: 1.2.0 - GPT-4.1 + Claude Haiku 4.5 + Daily Archive');
 
     // タスク実行エージェントの初期化
     if (config.enableTaskExecution) {
@@ -180,6 +226,19 @@ async function main() {
 
       taskExecutor = new TaskExecutor(config);
       console.log('[bootstrap] Task executor initialized');
+    }
+
+    // 日次アーカイブ機能の初期化
+    if (config.enableDailyArchive) {
+      console.log('[bootstrap] Initializing daily archive...');
+
+      if (!config.githubToken) {
+        throw new Error('GITHUB_TOKEN is required when ENABLE_DAILY_ARCHIVE is true');
+      }
+
+      dailyLogger = new DailyLogger();
+      githubClient = new GitHubClient(config);
+      console.log('[bootstrap] Daily archive initialized');
     }
 
     if (process.env.RUN_ONCE === 'true') {
@@ -200,6 +259,17 @@ async function main() {
       },
     );
 
+    // 日次アーカイブのcronジョブ（毎日23:59に実行）
+    let archiveTask;
+    if (config.enableDailyArchive) {
+      archiveTask = cron.schedule('59 23 * * *', () => {
+        archiveDailyLogs().catch((error) => {
+          console.error('[daily-archive] Unhandled error', error);
+        });
+      });
+      console.log('[bootstrap] Scheduled daily archive job at 23:59');
+    }
+
     // Run immediately on startup
     processOnce().catch((error) => {
       console.error('[processor] Initial run error', error);
@@ -210,6 +280,9 @@ async function main() {
       process.on(signal, async () => {
         console.log(`[bootstrap] Received ${signal}, shutting down...`);
         task.stop();
+        if (archiveTask) {
+          archiveTask.stop();
+        }
         await shutdown();
         process.exit(0);
       });

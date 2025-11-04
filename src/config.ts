@@ -16,6 +16,15 @@ const configSchema = z.object({
     .transform((val) => val === 'true'),
   zapierMcpUrl: z.string().url().optional(),
   zapierMcpApiKey: z.string().optional(),
+  // Daily Archive機能
+  enableDailyArchive: z
+    .string()
+    .default('false')
+    .transform((val) => val === 'true'),
+  githubToken: z.string().optional(),
+  githubOwner: z.string().optional(),
+  githubRepo: z.string().optional(),
+  githubBranch: z.string().default('main'),
 });
 
 export type AppConfig = z.infer<typeof configSchema>;
@@ -40,6 +49,11 @@ export function loadConfig(): AppConfig {
     enableTaskExecution: process.env.ENABLE_TASK_EXECUTION,
     zapierMcpUrl: process.env.ZAPIER_MCP_URL,
     zapierMcpApiKey: process.env.ZAPIER_MCP_API_KEY,
+    enableDailyArchive: process.env.ENABLE_DAILY_ARCHIVE,
+    githubToken: process.env.GITHUB_TOKEN,
+    githubOwner: process.env.GITHUB_OWNER,
+    githubRepo: process.env.GITHUB_REPO,
+    githubBranch: process.env.GITHUB_BRANCH,
   });
 
   cachedConfig = parsed;
