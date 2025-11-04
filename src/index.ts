@@ -164,7 +164,7 @@ async function main() {
       zapierMcpUrl: config.zapierMcpUrl ? 'SET' : 'NOT SET',
       zapierMcpApiKey: config.zapierMcpApiKey ? 'SET' : 'NOT SET',
     });
-    console.log('[bootstrap] Version: 1.0.2 - Anthropic MCP Integration with Claude Haiku 4.5');
+    console.log('[bootstrap] Version: 1.0.3 - MCP Retry Mechanism + Claude 3.5 Haiku');
 
     // タスク実行エージェントの初期化
     if (config.enableTaskExecution) {
