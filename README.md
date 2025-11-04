@@ -46,9 +46,10 @@ cp .env.example .env  # 必要に応じて作成
 **注意**: Claude Code用やclaude.ai用のAPIキーではなく、**Anthropic API MCP Server**のキーを使用してください。
 
 タスク実行機能を使用すると：
-- 抽出されたタスクが **Claude 4.5 Haiku** により自動的に実行されます
+- 抽出されたタスクが **Claude 3.5 Haiku** により自動的に実行されます
 - Anthropic公式のMCP統合機能を使用してZapier MCPに接続
 - Zapier MCP 経由で **Gmail 下書き作成、検索、Google Calendar、Notion** などが可能
+- MCP接続エラー時の自動リトライ機能（最大3回、指数バックオフ）
 - 実行結果が Slack に詳細レポートとして投稿されます
 
 #### 利用可能なツール (28個)
@@ -89,10 +90,11 @@ Limitless API → タスク抽出 (LLM) → Slack 通知
 
 ### タスク実行機能有効時
 ```
-Limitless API → タスク抽出 (GPT-4 Turbo) → タスク実行エージェント (Claude 4.5 Haiku + Zapier MCP) → Slack レポート通知
+Limitless API → タスク抽出 (GPT-4o) → タスク実行エージェント (Claude 3.5 Haiku + Zapier MCP) → Slack レポート通知
 ```
 
-Claude 4.5 HaikuがAnthropic公式のMCP統合を使用し、利用可能な28個のツールを使ってタスクを自動実行します。
+Claude 3.5 HaikuがAnthropic公式のMCP統合を使用し、利用可能な28個のツールを使ってタスクを自動実行します。
+MCP接続エラー時は自動的に最大3回リトライ（2秒→5秒→10秒の指数バックオフ）します。
 
 ## 今後の TODO
 - ブラウザ操作ツールの追加 (browser_use など)
