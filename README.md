@@ -25,8 +25,8 @@ cp .env.example .env  # 必要に応じて作成
 ### タスク抽出用 LLM 設定
 以下のいずれかを選択：
 
+- **OpenAI** (推奨): `OPENAI_API_KEY` + `TASK_MODEL_PROVIDER="openai"` + `TASK_MODEL_ID="gpt-4.1"` (最新・最高精度)
 - **OpenRouter**: `OPENROUTER_API_KEY` + `TASK_MODEL_PROVIDER="openrouter"` + `TASK_MODEL_ID="x-ai/grok-4-fast"`
-- **OpenAI**: `OPENAI_API_KEY` + `TASK_MODEL_PROVIDER="openai"` + `TASK_MODEL_ID="gpt-4-turbo-2024-04-09"` (推奨: GPT-4 Turbo)
 - **Anthropic**: `ANTHROPIC_API_KEY` + `TASK_MODEL_PROVIDER="anthropic"` + `TASK_MODEL_ID="claude-3-5-sonnet-20241022"`
 
 ### タスク実行機能 (オプション)
@@ -46,7 +46,7 @@ cp .env.example .env  # 必要に応じて作成
 **注意**: Claude Code用やclaude.ai用のAPIキーではなく、**Anthropic API MCP Server**のキーを使用してください。
 
 タスク実行機能を使用すると：
-- 抽出されたタスクが **Claude 3.5 Haiku** により自動的に実行されます
+- 抽出されたタスクが **Claude Haiku 4.5** により自動的に実行されます
 - Anthropic公式のMCP統合機能を使用してZapier MCPに接続
 - Zapier MCP 経由で **Gmail 下書き作成、検索、Google Calendar、Notion** などが可能
 - MCP接続エラー時の自動リトライ機能（最大3回、指数バックオフ）
@@ -90,10 +90,10 @@ Limitless API → タスク抽出 (LLM) → Slack 通知
 
 ### タスク実行機能有効時
 ```
-Limitless API → タスク抽出 (GPT-4o) → タスク実行エージェント (Claude 3.5 Haiku + Zapier MCP) → Slack レポート通知
+Limitless API → タスク抽出 (GPT-4.1) → タスク実行エージェント (Claude Haiku 4.5 + Zapier MCP) → Slack レポート通知
 ```
 
-Claude 3.5 HaikuがAnthropic公式のMCP統合を使用し、利用可能な28個のツールを使ってタスクを自動実行します。
+Claude Haiku 4.5がAnthropic公式のMCP統合を使用し、利用可能な28個のツールを使ってタスクを自動実行します。
 MCP接続エラー時は自動的に最大3回リトライ（2秒→5秒→10秒の指数バックオフ）します。
 
 ## 今後の TODO
