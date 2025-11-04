@@ -117,7 +117,7 @@ slackメッセージとして送るので、絵文字や改行を適切に入れ
       iteration++;
 
       const response = await anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-3-5-sonnet-20240620',
         max_tokens: 4096,
         system: systemPrompt,
         messages,
