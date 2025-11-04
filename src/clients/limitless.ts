@@ -3,15 +3,15 @@ import { z } from 'zod';
 
 const lifelogContentSchema = z.object({
   content: z.string(),
-  endTime: z.string().datetime(),
-  startTime: z.string().datetime().optional(),
+  endTime: z.string(),
+  startTime: z.string().optional(),
 });
 
 const lifelogSchema = z.object({
   id: z.string(),
   title: z.string().default(''),
-  startTime: z.string().datetime(),
-  endTime: z.string().datetime(),
+  startTime: z.string(),
+  endTime: z.string(),
   contents: z.array(lifelogContentSchema).default([]),
 });
 
