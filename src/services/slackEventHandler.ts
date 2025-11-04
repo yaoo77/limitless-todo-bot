@@ -34,7 +34,11 @@ export class SlackEventHandler {
 
     // OCRサービス初期化
     if (config.slackBotToken) {
-      this.ocrService = new OcrService(config.slackBotToken, config.googleCloudCredentialsPath);
+      this.ocrService = new OcrService(
+        config.slackBotToken,
+        config.googleCloudCredentialsPath,
+        config.googleCloudCredentialsJson,
+      );
     }
 
     // 要約サービス初期化

@@ -43,6 +43,7 @@ const configSchema = z.object({
   slackSigningSecret: z.string().optional(),
   ocrTriggerEmoji: z.string().default('memo'), // トリガーとなる絵文字名
   googleCloudCredentialsPath: z.string().optional(), // GCPサービスアカウントJSONファイルパス
+  googleCloudCredentialsJson: z.string().optional(), // GCPサービスアカウントJSON文字列
   ocrGithubPath: z.string().default('ocr_results'), // GitHub保存先パス
   expressPort: z.coerce.number().default(3000), // Expressサーバーポート
 });
@@ -83,6 +84,7 @@ export function loadConfig(): AppConfig {
     slackSigningSecret: process.env.SLACK_SIGNING_SECRET,
     ocrTriggerEmoji: process.env.OCR_TRIGGER_EMOJI,
     googleCloudCredentialsPath: process.env.GOOGLE_CLOUD_CREDENTIALS_PATH,
+    googleCloudCredentialsJson: process.env.GOOGLE_CLOUD_CREDENTIALS_JSON,
     ocrGithubPath: process.env.OCR_GITHUB_PATH,
     expressPort: process.env.EXPRESS_PORT,
   });

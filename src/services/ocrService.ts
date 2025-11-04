@@ -17,11 +17,19 @@ export class OcrService {
   constructor(
     slackBotToken: string,
     googleCredentialsPath?: string,
+    googleCredentialsJson?: string,
   ) {
     this.slackClient = new WebClient(slackBotToken);
 
     // Google Cloud Vision クライアント初期化
-    if (googleCredentialsPath) {
+    if (googleCredentialsJson) {
+      // JSON文字列から認証情報を読み込む
+      const credentials = JSON.parse(googleCredentialsJson);
+      this.visionClient = new vision.ImageAnnotatorClient({
+        credentials,
+      });
+    } else if (googleCredentialsPath) {
+      // ファイルパスから認証情報を読み込む
       this.visionClient = new vision.ImageAnnotatorClient({
         keyFilename: googleCredentialsPath,
       });
