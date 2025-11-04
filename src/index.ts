@@ -3,6 +3,7 @@ import process from 'node:process';
 import cron from 'node-cron';
 
 import { fetchLifelogs } from './clients/limitless.js';
+import { MCPClient } from './clients/mcpClient.js';
 import { loadConfig } from './config.js';
 import {
   getLatestEndTime,
@@ -11,10 +12,13 @@ import {
   upsertLatestEndTime,
 } from './db/repository.js';
 import { sendTasksToSlack } from './services/slackNotifier.js';
+import { TaskExecutor } from './services/taskExecutor.js';
 import { extractTasksFromLifelogs } from './services/taskExtractor.js';
 import { computeTaskHash } from './utils/hash.js';
 
 const config = loadConfig();
+let mcpClient: MCPClient | null = null;
+let taskExecutor: TaskExecutor | null = null;
 
 async function processOnce(): Promise<void> {
   const lastProcessed = await getLatestEndTime();
@@ -72,19 +76,64 @@ async function processOnce(): Promise<void> {
   }
 
   const latestEndTime = getMaxEndTime(newLifelogs);
-  const tasksForSlack = uniqueTasks.map(({ lifelogId, task, timestamp }) => ({
-    lifelogId,
-    task,
-    timestamp,
-  }));
 
-  await sendTasksToSlack(tasksForSlack, config, {
-    latestEndTime: latestEndTime?.toISOString() ?? null,
-    totalTasks: uniqueTasks.length,
-  });
+  // タスク実行が有効な場合、各タスクを実行してからSlackに通知
+  if (config.enableTaskExecution && taskExecutor) {
+    console.log(`[processor] Executing ${uniqueTasks.length} task(s)...`);
 
-  for (const task of uniqueTasks) {
-    await recordProcessedTask(task.lifelogId, task.hash, task.task, task.timestamp);
+    for (const taskWithHash of uniqueTasks) {
+      const { lifelogId, task, timestamp, hash } = taskWithHash;
+      const todoTask = { lifelogId, task, timestamp };
+
+      try {
+        const result = await taskExecutor.executeTask(todoTask);
+
+        // 実行結果をSlackに通知
+        await sendTasksToSlack(
+          [todoTask],
+          config,
+          {
+            latestEndTime: latestEndTime?.toISOString() ?? null,
+            totalTasks: 1,
+            executionReport: result.report,
+          },
+        );
+
+        // 処理済みとして記録
+        await recordProcessedTask(lifelogId, hash, task, timestamp);
+      } catch (error) {
+        console.error(`[processor] Task execution error:`, error);
+
+        // エラーでも通知は送る
+        await sendTasksToSlack(
+          [todoTask],
+          config,
+          {
+            latestEndTime: latestEndTime?.toISOString() ?? null,
+            totalTasks: 1,
+            executionReport: `エラー: ${(error as Error).message}`,
+          },
+        );
+
+        await recordProcessedTask(lifelogId, hash, task, timestamp);
+      }
+    }
+  } else {
+    // タスク実行が無効な場合、従来通りタスクリストをSlackに通知
+    const tasksForSlack = uniqueTasks.map(({ lifelogId, task, timestamp }) => ({
+      lifelogId,
+      task,
+      timestamp,
+    }));
+
+    await sendTasksToSlack(tasksForSlack, config, {
+      latestEndTime: latestEndTime?.toISOString() ?? null,
+      totalTasks: uniqueTasks.length,
+    });
+
+    for (const task of uniqueTasks) {
+      await recordProcessedTask(task.lifelogId, task.hash, task.task, task.timestamp);
+    }
   }
 
   if (latestEndTime) {
@@ -112,6 +161,31 @@ function getCronExpression(minutes: number): string {
 
 async function main() {
   try {
+    console.log('[bootstrap] Config loaded:', {
+      enableTaskExecution: config.enableTaskExecution,
+      zapierMcpUrl: config.zapierMcpUrl ? 'SET' : 'NOT SET',
+      zapierMcpApiKey: config.zapierMcpApiKey ? 'SET' : 'NOT SET',
+    });
+
+    // MCPクライアントの初期化（タスク実行が有効な場合）
+    if (config.enableTaskExecution) {
+      console.log('[bootstrap] Initializing MCP client...');
+
+      if (!config.zapierMcpUrl) {
+        throw new Error('ZAPIER_MCP_URL is required when ENABLE_TASK_EXECUTION is true');
+      }
+
+      if (!config.zapierMcpApiKey) {
+        throw new Error('ZAPIER_MCP_API_KEY is required when ENABLE_TASK_EXECUTION is true');
+      }
+
+      mcpClient = new MCPClient(config.zapierMcpUrl, config.zapierMcpApiKey);
+      await mcpClient.connect();
+
+      taskExecutor = new TaskExecutor(config, mcpClient);
+      console.log('[bootstrap] Task executor initialized');
+    }
+
     if (process.env.RUN_ONCE === 'true') {
       await processOnce();
       await shutdown();
@@ -152,6 +226,10 @@ async function main() {
 }
 
 async function shutdown() {
+  if (mcpClient) {
+    await mcpClient.disconnect();
+  }
+
   const { pool } = await import('./db/client.js');
   await pool.end();
 }

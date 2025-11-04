@@ -6,6 +6,7 @@ import type { TodoTask } from './taskExtractor.js';
 export interface NotificationContext {
   latestEndTime: string | null;
   totalTasks: number;
+  executionReport?: string;
 }
 
 export async function sendTasksToSlack(
@@ -36,7 +37,9 @@ function buildBlocks(tasks: TodoTask[], context: NotificationContext) {
     type: 'section',
     text: {
       type: 'mrkdwn',
-      text: `:robot_face: Limitless TODO Bot\n*新しいタスク*: ${tasks.length}件`,
+      text: context.executionReport
+        ? `:robot_face: Limitless TODO Bot\n*タスク実行レポート*`
+        : `:robot_face: Limitless TODO Bot\n*新しいタスク*: ${tasks.length}件`,
     },
   };
 
@@ -50,6 +53,30 @@ function buildBlocks(tasks: TodoTask[], context: NotificationContext) {
     ],
   };
 
+  const divider = { type: 'divider' };
+
+  // タスク実行レポートがある場合
+  if (context.executionReport) {
+    const taskInfo = {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*タスク*: ${tasks[0].task}\n*時刻*: ${tasks[0].timestamp}`,
+      },
+    };
+
+    const reportBlock = {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: context.executionReport,
+      },
+    };
+
+    return [header, meta, divider, taskInfo, divider, reportBlock];
+  }
+
+  // 通常のタスクリスト
   const taskBlocks = tasks.map((task) => ({
     type: 'section',
     text: {
@@ -57,8 +84,6 @@ function buildBlocks(tasks: TodoTask[], context: NotificationContext) {
       text: `• *${task.timestamp}* _(lifelog: ${task.lifelogId})_\n${task.task}`,
     },
   }));
-
-  const divider = { type: 'divider' };
 
   return [header, meta, divider, ...taskBlocks];
 }
