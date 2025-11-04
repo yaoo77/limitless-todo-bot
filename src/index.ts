@@ -166,6 +166,7 @@ async function main() {
       zapierMcpUrl: config.zapierMcpUrl ? 'SET' : 'NOT SET',
       zapierMcpApiKey: config.zapierMcpApiKey ? 'SET' : 'NOT SET',
     });
+    console.log('[bootstrap] Version: 1.0.1 - MCP Integration with Claude 3.5 Sonnet (20241022)');
 
     // MCPクライアントの初期化（タスク実行が有効な場合）
     if (config.enableTaskExecution) {
