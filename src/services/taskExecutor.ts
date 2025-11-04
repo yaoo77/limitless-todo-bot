@@ -84,50 +84,78 @@ slackメッセージとして送るので、絵文字や改行を適切に入れ
       throw new Error('ZAPIER_MCP_API_KEY is required for task execution');
     }
 
-    // Anthropic公式のMCP統合を使用
-    const response = await this.anthropic.beta.messages.create({
-      model: 'claude-3-5-haiku-20241022',
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: [
-        {
-          role: 'user',
-          content: userPrompt,
-        },
-      ],
-      mcp_servers: [
-        {
-          type: 'url',
-          url: this.config.zapierMcpUrl || 'https://mcp.zapier.com/api/mcp/mcp',
-          name: 'zapier',
-          authorization_token: this.config.zapierMcpApiKey,
-        },
-      ],
-      betas: ['mcp-client-2025-04-04'],
-      temperature: 0.3,
-    });
+    // リトライ設定
+    const maxRetries = 3;
+    const retryDelays = [2000, 5000, 10000]; // 2秒、5秒、10秒
 
-    console.log(`[executor] Claude response (stop_reason: ${response.stop_reason})`);
-
-    // 最終応答を取得
-    const textBlocks = response.content.filter((block): block is Anthropic.TextBlock => block.type === 'text');
-
-    if (textBlocks.length > 0) {
-      const content = textBlocks[0].text;
-
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        const parsed = JSON.parse(content);
-        const validated = executionResponseSchema.parse(parsed);
+        console.log(`[executor] Attempt ${attempt + 1}/${maxRetries}`);
 
-        return validated;
-      } catch (parseError) {
-        // JSON形式でない場合、そのままレポートとして使用
-        return {
-          task_report: content,
-        };
+        // Anthropic公式のMCP統合を使用
+        const response = await this.anthropic.beta.messages.create({
+          model: 'claude-3-5-haiku-20241022',
+          max_tokens: 4096,
+          system: systemPrompt,
+          messages: [
+            {
+              role: 'user',
+              content: userPrompt,
+            },
+          ],
+          mcp_servers: [
+            {
+              type: 'url',
+              url: this.config.zapierMcpUrl || 'https://mcp.zapier.com/api/mcp/mcp',
+              name: 'zapier',
+              authorization_token: this.config.zapierMcpApiKey,
+            },
+          ],
+          betas: ['mcp-client-2025-04-04'],
+          temperature: 0.3,
+        });
+
+        console.log(`[executor] Claude response (stop_reason: ${response.stop_reason})`);
+
+        // 最終応答を取得
+        const textBlocks = response.content.filter((block): block is Anthropic.TextBlock => block.type === 'text');
+
+        if (textBlocks.length > 0) {
+          const content = textBlocks[0].text;
+
+          try {
+            const parsed = JSON.parse(content);
+            const validated = executionResponseSchema.parse(parsed);
+
+            return validated;
+          } catch (parseError) {
+            // JSON形式でない場合、そのままレポートとして使用
+            return {
+              task_report: content,
+            };
+          }
+        }
+
+        throw new Error('Task execution did not produce a valid result');
+      } catch (error) {
+        const isLastAttempt = attempt === maxRetries - 1;
+        const isMcpError =
+          error instanceof Error &&
+          (error.message.includes('503 Service Unavailable') ||
+            error.message.includes('Connection error while communicating with MCP server'));
+
+        if (isMcpError && !isLastAttempt) {
+          const delay = retryDelays[attempt];
+          console.log(`[executor] MCP server error, retrying in ${delay}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+
+        // リトライ不可能なエラー、または最終試行でのエラー
+        throw error;
       }
     }
 
-    throw new Error('Task execution did not produce a valid result');
+    throw new Error('Task execution failed after all retries');
   }
 }
