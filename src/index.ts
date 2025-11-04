@@ -260,7 +260,7 @@ async function main() {
     );
 
     // 日次アーカイブのcronジョブ（毎日23:59に実行）
-    let archiveTask;
+    let archiveTask: cron.ScheduledTask | undefined;
     if (config.enableDailyArchive) {
       archiveTask = cron.schedule('59 23 * * *', () => {
         archiveDailyLogs().catch((error) => {

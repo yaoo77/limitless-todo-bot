@@ -1,4 +1,4 @@
-import type { Lifelog } from '../api/limitless.js';
+import type { Lifelog } from '../clients/limitless.js';
 
 export interface DailyLogEntry {
   timestamp: string;
@@ -12,19 +12,22 @@ export class DailyLogger {
    * Lifelogから日記エントリーを追加
    */
   addLifelog(lifelog: Lifelog): void {
-    if (!lifelog.transcription) {
+    if (!lifelog.contents || lifelog.contents.length === 0) {
       return;
     }
 
-    const timestamp = new Date(lifelog.started_at).toLocaleTimeString('ja-JP', {
+    const timestamp = new Date(lifelog.startTime).toLocaleTimeString('ja-JP', {
       hour: '2-digit',
       minute: '2-digit',
       timeZone: 'Asia/Tokyo',
     });
 
+    // contentsから全ての内容を結合
+    const content = lifelog.contents.map((c) => c.content).join('\n');
+
     this.logs.push({
       timestamp,
-      content: lifelog.transcription,
+      content,
     });
   }
 
