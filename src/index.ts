@@ -16,11 +16,13 @@ import { sendTasksToSlack } from './services/slackNotifier.js';
 import { TaskExecutor } from './services/taskExecutor.js';
 import { extractTasksFromLifelogs } from './services/taskExtractor.js';
 import { computeTaskHash } from './utils/hash.js';
+import { ExpressServer } from './server/expressServer.js';
 
 const config = loadConfig();
 let taskExecutor: TaskExecutor | null = null;
 let dailyLogger: DailyLogger | null = null;
 let githubClient: GitHubClient | null = null;
+let expressServer: ExpressServer | null = null;
 
 async function processOnce(): Promise<void> {
   const lastProcessed = await getLatestEndTime();
@@ -206,11 +208,14 @@ async function main() {
     console.log('[bootstrap] Config loaded:', {
       enableTaskExecution: config.enableTaskExecution,
       enableDailyArchive: config.enableDailyArchive,
+      enableSlackOcr: config.enableSlackOcr,
+      enablePerplexitySearch: config.enablePerplexitySearch,
       zapierMcpUrl: config.zapierMcpUrl ? 'SET' : 'NOT SET',
       zapierMcpApiKey: config.zapierMcpApiKey ? 'SET' : 'NOT SET',
       githubToken: config.githubToken ? 'SET' : 'NOT SET',
+      slackBotToken: config.slackBotToken ? 'SET' : 'NOT SET',
     });
-    console.log('[bootstrap] Version: 1.2.0 - GPT-4.1 + Claude Haiku 4.5 + Daily Archive');
+    console.log('[bootstrap] Version: 1.3.0 - GPT-4.1 + Claude Haiku 4.5 + Daily Archive + Slack OCR');
 
     // タスク実行エージェントの初期化
     if (config.enableTaskExecution) {
@@ -239,6 +244,27 @@ async function main() {
       dailyLogger = new DailyLogger();
       githubClient = new GitHubClient(config);
       console.log('[bootstrap] Daily archive initialized');
+    }
+
+    // Slack OCR機能の初期化
+    if (config.enableSlackOcr) {
+      console.log('[bootstrap] Initializing Slack OCR...');
+
+      if (!config.slackBotToken) {
+        throw new Error('SLACK_BOT_TOKEN is required when ENABLE_SLACK_OCR is true');
+      }
+
+      if (!config.slackSigningSecret) {
+        throw new Error('SLACK_SIGNING_SECRET is required when ENABLE_SLACK_OCR is true');
+      }
+
+      if (!config.anthropicApiKey) {
+        throw new Error('ANTHROPIC_API_KEY is required for text summarization when ENABLE_SLACK_OCR is true');
+      }
+
+      expressServer = new ExpressServer(config);
+      expressServer.start();
+      console.log('[bootstrap] Slack OCR server initialized');
     }
 
     if (process.env.RUN_ONCE === 'true') {

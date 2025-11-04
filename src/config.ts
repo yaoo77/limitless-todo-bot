@@ -34,6 +34,17 @@ const configSchema = z.object({
     .string()
     .default('false')
     .transform((val) => val === 'true'),
+  // Slack OCR機能
+  enableSlackOcr: z
+    .string()
+    .default('false')
+    .transform((val) => val === 'true'),
+  slackBotToken: z.string().optional(),
+  slackSigningSecret: z.string().optional(),
+  ocrTriggerEmoji: z.string().default('memo'), // トリガーとなる絵文字名
+  googleCloudCredentialsPath: z.string().optional(), // GCPサービスアカウントJSONファイルパス
+  ocrGithubPath: z.string().default('ocr_results'), // GitHub保存先パス
+  expressPort: z.coerce.number().default(3000), // Expressサーバーポート
 });
 
 export type AppConfig = z.infer<typeof configSchema>;
@@ -67,6 +78,13 @@ export function loadConfig(): AppConfig {
     taskExecutionPrompt: process.env.TASK_EXECUTION_PROMPT,
     perplexityApiKey: process.env.PERPLEXITY_API_KEY,
     enablePerplexitySearch: process.env.ENABLE_PERPLEXITY_SEARCH,
+    enableSlackOcr: process.env.ENABLE_SLACK_OCR,
+    slackBotToken: process.env.SLACK_BOT_TOKEN,
+    slackSigningSecret: process.env.SLACK_SIGNING_SECRET,
+    ocrTriggerEmoji: process.env.OCR_TRIGGER_EMOJI,
+    googleCloudCredentialsPath: process.env.GOOGLE_CLOUD_CREDENTIALS_PATH,
+    ocrGithubPath: process.env.OCR_GITHUB_PATH,
+    expressPort: process.env.EXPRESS_PORT,
   });
 
   cachedConfig = parsed;

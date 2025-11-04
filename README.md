@@ -6,6 +6,7 @@ Limitless の Lifelogs からタスクを抽出して Slack に通知する常�
 - Limitless API `GET /v1/lifelogs` から最新ログを取得。
 - LLM を用いて Todo タスクを抽出し、重複防止用ハッシュを Postgres に保存。
 - **NEW**: タスク実行機能 - Zapier MCP 経由で Gmail 操作や検索を自動実行。
+- **NEW**: Slack OCR機能 - 絵文字リアクションで画像からテキスト抽出・要約・GitHub保存。
 - Slack Webhook を使って `#todo-kawase` など任意チャンネルへレポート投稿。
 - 5 分間隔 (デフォルト) のポーリング。`RUN_ONCE=true` で単発実行も可能。
 
@@ -28,6 +29,72 @@ cp .env.example .env  # 必要に応じて作成
 - **OpenAI** (推奨): `OPENAI_API_KEY` + `TASK_MODEL_PROVIDER="openai"` + `TASK_MODEL_ID="gpt-4.1"` (最新・最高精度)
 - **OpenRouter**: `OPENROUTER_API_KEY` + `TASK_MODEL_PROVIDER="openrouter"` + `TASK_MODEL_ID="x-ai/grok-4-fast"`
 - **Anthropic**: `ANTHROPIC_API_KEY` + `TASK_MODEL_PROVIDER="anthropic"` + `TASK_MODEL_ID="claude-3-5-sonnet-20241022"`
+
+### カスタムプロンプト (オプション)
+**NEW**: LLMのプロンプトをカスタマイズ可能になりました。
+
+- `TODO_EXTRACTION_PROMPT` - タスク抽出用のカスタムプロンプト
+- `TASK_EXECUTION_PROMPT` - タスク実行用のカスタムプロンプト
+
+設定しない場合はデフォルトプロンプトが使用されます。環境変数で自由にカスタマイズできます。
+
+### Perplexity検索 (オプション)
+**NEW**: タスクに「調べ」「検索」などのキーワードが含まれる場合、自動的にPerplexity APIで検索を実行します。
+
+- `ENABLE_PERPLEXITY_SEARCH="true"` - Perplexity検索を有効化
+- `PERPLEXITY_API_KEY` - Perplexity API キー
+
+検索結果はタスク実行時のコンテキストに自動追加され、精度が向上します。
+
+### Slack OCR機能 (オプション)
+**NEW**: Slackで画像に特定の絵文字リアクションをつけると、自動的にOCR処理を実行し、テキスト抽出と要約を行います。
+
+機能概要：
+- Slack絵文字リアクションをトリガーとして画像をOCR処理
+- Google Cloud Vision APIで高精度なテキスト抽出
+- Claude Haiku 4.5で抽出テキストを自動要約
+- 結果をGitHubリポジトリに自動保存
+- Slackに要約結果を通知
+
+#### 環境変数
+- `ENABLE_SLACK_OCR="true"` - Slack OCR機能を有効化
+- `SLACK_BOT_TOKEN` - Slack Bot Token (`xoxb-...`形式)
+- `SLACK_SIGNING_SECRET` - Slack Signing Secret（セキュリティ検証用）
+- `OCR_TRIGGER_EMOJI` - トリガーとなる絵文字名（デフォルト: `memo`）
+- `GOOGLE_CLOUD_CREDENTIALS_PATH` - Google Cloud サービスアカウントJSONファイルパス
+- `OCR_GITHUB_PATH` - GitHub保存先パス（デフォルト: `ocr_results`）
+- `EXPRESS_PORT` - Expressサーバーポート（デフォルト: `3000`）
+- `ANTHROPIC_API_KEY` - テキスト要約用（タスク実行機能と共用可能）
+
+#### Slack App設定方法
+1. [Slack API](https://api.slack.com/apps) で新規アプリを作成
+2. **OAuth & Permissions**:
+   - Bot Token Scopes: `channels:history`, `files:read`, `reactions:read`, `users:read`, `channels:read`
+   - Install to Workspace → Bot Token (`xoxb-...`) をコピー
+3. **Event Subscriptions**:
+   - Enable Events: On
+   - Request URL: `https://your-railway-domain.railway.app/slack/events`
+   - Subscribe to bot events: `reaction_added`
+4. **Basic Information**:
+   - Signing Secret をコピー
+5. 環境変数に設定:
+   - `SLACK_BOT_TOKEN`: コピーしたBot Token
+   - `SLACK_SIGNING_SECRET`: コピーしたSigning Secret
+
+#### Google Cloud Vision API設定
+1. [Google Cloud Console](https://console.cloud.google.com/) でプロジェクト作成
+2. Vision API を有効化
+3. サービスアカウント作成:
+   - IAM & Admin → Service Accounts → Create Service Account
+   - Role: Cloud Vision API User
+   - JSON キーを生成・ダウンロード
+4. `GOOGLE_CLOUD_CREDENTIALS_PATH` にJSONファイルパスを設定
+
+#### 使い方
+1. Slackで画像を含むメッセージに、設定した絵文字（デフォルト: `:memo:`）でリアクション
+2. 自動的にOCR処理が開始されます
+3. 数秒後、Slackに要約結果が通知されます
+4. 詳細結果はGitHubリポジトリの `ocr_results/` に保存されます
 
 ### タスク実行機能 (オプション)
 タスク実行機能を有効にする場合、追加で以下の環境変数が必要です：

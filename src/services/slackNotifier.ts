@@ -9,6 +9,22 @@ export interface NotificationContext {
   executionReport?: string;
 }
 
+/**
+ * シンプルなテキストメッセージをSlackに投稿
+ */
+export async function postToSlack(config: AppConfig, text: string): Promise<void> {
+  const response = (await fetch(config.slackWebhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  })) as Response;
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Slack notification failed (${response.status}): ${errorText}`);
+  }
+}
+
 export async function sendTasksToSlack(
   tasks: TodoTask[],
   config: AppConfig,
