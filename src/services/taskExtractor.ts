@@ -66,13 +66,41 @@ export async function extractTasksFromLifelogs(
   }
 
   const apiKey = requireModelKey(config);
+
+  // カスタムプロンプトまたはデフォルトプロンプトを使用
+  const systemPrompt =
+    config.todoExtractionPrompt ||
+    `あなたは、ユーザーが入力する会話の文字起こしから、To-Doリストに追加すべき項目を抽出・確認するAIエージェントです。
+ユーザーが「〜するべき」「リマインドしておきたい」「覚えておきたい」「後で検索したい」といった意図を示す発言があれば、それらをタスクとして認識し、該当するタスクをすべて指定のフォーマットで出力してください。
+雑談など、タスク化に不要な発言は無視して構いません。
+文字起こしであることを前提に、文脈を踏まえてメタ認知的に判断しながら処理してください。
+
+## 注意
+- 必ず〇〇の〇〇を行う のようにtaskは具体的に書くようにしてください
+- 具体化する際に、文字起こしや会話の前後を元に作成すること
+- 具体化できないものはTodoに追加しないこと
+
+例:
+OK: AIエージェントフレームワークmastraの情報を共有する
+NG: 情報を共有する
+
+出力形式:
+{
+  "tasks": [
+    {
+      "lifelogId": "...",
+      "task": "...",
+      "timestamp": "2025-01-01T00:01:00+09:00"
+    }
+  ]
+}`;
+
   const payload = {
     model: config.taskModelId,
     messages: [
       {
         role: 'system',
-        content:
-          'あなたは音声会話の文字起こしからTodoタスクを抽出する専門家です。指示されたJSON形式のみで出力し、それ以外の文字は返さないでください。',
+        content: systemPrompt,
       },
       {
         role: 'user',
@@ -82,8 +110,6 @@ export async function extractTasksFromLifelogs(
             text: [
               '以下のlifelogデータから、タスク化が必要な発言を抽出してください。',
               '各タスクは日本語で簡潔にまとめ、推定時刻（ISO8601、タイムゾーン込み）を付与してください。',
-              '出力は次のフォーマットに厳密に従ってください:',
-              '{ "tasks": [ { "lifelogId": "...", "task": "...", "timestamp": "..." } ] }',
               'lifelogId は入力データの id を使用してください。',
               '---',
               buildPrompt(lifelogs),

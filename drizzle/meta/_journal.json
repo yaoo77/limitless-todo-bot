@@ -8,6 +8,13 @@
       "when": 1762187488713,
       "tag": "0000_daily_earthquake",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1762270993219,
+      "tag": "0001_shallow_grey_gargoyle",
+      "breakpoints": true
     }
   ]
 }

@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 
 import type { AppConfig } from '../config.js';
+import { PerplexityClient } from './perplexityClient.js';
 import type { TodoTask } from './taskExtractor.js';
 
 export interface TaskExecutionResult {
@@ -17,6 +18,7 @@ const executionResponseSchema = z.object({
 
 export class TaskExecutor {
   private readonly anthropic: Anthropic;
+  private readonly perplexityClient: PerplexityClient | null = null;
 
   constructor(private readonly config: AppConfig) {
     const apiKey = this.config.anthropicApiKey;
@@ -27,15 +29,36 @@ export class TaskExecutor {
     this.anthropic = new Anthropic({
       apiKey,
     });
+
+    // Perplexity検索が有効な場合、クライアントを初期化
+    if (this.config.enablePerplexitySearch && this.config.perplexityApiKey) {
+      this.perplexityClient = new PerplexityClient(this.config.perplexityApiKey);
+    }
   }
 
   async executeTask(task: TodoTask): Promise<TaskExecutionResult> {
     try {
       console.log(`[executor] Executing task: ${task.task}`);
 
-      // タスク実行エージェントのプロンプト
-      const systemPrompt = `あなたはユーザーが入力するTodoタスクを実行する便利なAIエージェントです。
-ユーザーの入力に対して、利用可能なツール（Gmail、Google Calendar、Notion、Zoom等）を適切に活用しながら、タスクを実行してください。
+      // Perplexity検索が必要な場合、事前に検索
+      let searchContext = '';
+      if (this.perplexityClient && PerplexityClient.needsSearch(task.task)) {
+        console.log(`[executor] Performing Perplexity search for task`);
+        try {
+          const searchResult = await this.perplexityClient.search(task.task);
+          searchContext = `\n\n## 検索結果\n${searchResult.content}\n\n**出典:**\n${searchResult.citations.map((c, i) => `${i + 1}. ${c}`).join('\n')}`;
+          console.log(`[executor] Perplexity search completed`);
+        } catch (error) {
+          console.error(`[executor] Perplexity search failed:`, error);
+          // 検索失敗してもタスク実行は続行
+        }
+      }
+
+      // カスタムプロンプトまたはデフォルトプロンプトを使用
+      const systemPrompt =
+        this.config.taskExecutionPrompt ||
+        `あなたはユーザーが入力するTodoタスクを実行する便利なAIエージェントです。
+ユーザーの入力に対して、あなたが持っているツールを適切に活用しながら、ユーザーがやりたいタスクの結果を作成して出力してください。
 
 出力するものは、タスクに対する実行結果レポートをお願いします。
 レポートは日本語で、わかりやすく簡潔にお願いします。
@@ -56,7 +79,7 @@ slackメッセージとして送るので、絵文字や改行を適切に入れ
   "task_report": "..."
 }`;
 
-      const userPrompt = `ユーザー入力値: ${task.task}\n時間: ${task.timestamp}`;
+      const userPrompt = `ユーザー入力値: ${task.task}\n時間: ${task.timestamp}${searchContext}`;
 
       const result = await this.callClaudeWithMCP(systemPrompt, userPrompt);
 

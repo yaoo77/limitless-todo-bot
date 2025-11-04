@@ -25,6 +25,15 @@ const configSchema = z.object({
   githubOwner: z.string().optional(),
   githubRepo: z.string().optional(),
   githubBranch: z.string().default('main'),
+  // Custom Prompts
+  todoExtractionPrompt: z.string().optional(),
+  taskExecutionPrompt: z.string().optional(),
+  // Perplexity API
+  perplexityApiKey: z.string().optional(),
+  enablePerplexitySearch: z
+    .string()
+    .default('false')
+    .transform((val) => val === 'true'),
 });
 
 export type AppConfig = z.infer<typeof configSchema>;
@@ -54,6 +63,10 @@ export function loadConfig(): AppConfig {
     githubOwner: process.env.GITHUB_OWNER,
     githubRepo: process.env.GITHUB_REPO,
     githubBranch: process.env.GITHUB_BRANCH,
+    todoExtractionPrompt: process.env.TODO_EXTRACTION_PROMPT,
+    taskExecutionPrompt: process.env.TASK_EXECUTION_PROMPT,
+    perplexityApiKey: process.env.PERPLEXITY_API_KEY,
+    enablePerplexitySearch: process.env.ENABLE_PERPLEXITY_SEARCH,
   });
 
   cachedConfig = parsed;
