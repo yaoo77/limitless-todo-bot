@@ -2,7 +2,6 @@ import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 
 import type { AppConfig } from '../config.js';
-import type { MCPClient } from '../clients/mcpClient.js';
 import type { TodoTask } from './taskExtractor.js';
 
 export interface TaskExecutionResult {
@@ -17,27 +16,26 @@ const executionResponseSchema = z.object({
 });
 
 export class TaskExecutor {
-  constructor(
-    private readonly config: AppConfig,
-    private readonly mcpClient: MCPClient,
-  ) {}
+  private readonly anthropic: Anthropic;
+
+  constructor(private readonly config: AppConfig) {
+    const apiKey = this.config.anthropicApiKey;
+    if (!apiKey) {
+      throw new Error('ANTHROPIC_API_KEY is required for task execution');
+    }
+
+    this.anthropic = new Anthropic({
+      apiKey,
+    });
+  }
 
   async executeTask(task: TodoTask): Promise<TaskExecutionResult> {
     try {
       console.log(`[executor] Executing task: ${task.task}`);
 
-      // MCPツールの情報を取得
-      const availableTools = this.mcpClient.getAvailableTools();
-      const toolDescriptions = availableTools
-        .map((tool) => `- ${tool.name}: ${tool.description || 'No description'}`)
-        .join('\n');
-
       // タスク実行エージェントのプロンプト
       const systemPrompt = `あなたはユーザーが入力するTodoタスクを実行する便利なAIエージェントです。
-ユーザーの入力に対して、あなたが持っている以下のツールを適切に活用しながら、ユーザーがやりたいタスクの結果を作成して出力してください。
-
-利用可能なツール:
-${toolDescriptions}
+ユーザーの入力に対して、利用可能なツール（Gmail、Google Calendar、Notion、Zoom等）を適切に活用しながら、タスクを実行してください。
 
 出力するものは、タスクに対する実行結果レポートをお願いします。
 レポートは日本語で、わかりやすく簡潔にお願いします。
@@ -60,8 +58,7 @@ slackメッセージとして送るので、絵文字や改行を適切に入れ
 
       const userPrompt = `ユーザー入力値: ${task.task}\n時間: ${task.timestamp}`;
 
-      // Claudeにタスク実行を依頼（Tool Use使用）
-      const result = await this.callClaudeWithTools(systemPrompt, userPrompt, availableTools);
+      const result = await this.callClaudeWithMCP(systemPrompt, userPrompt);
 
       console.log(`[executor] Task executed successfully`);
 
@@ -82,131 +79,53 @@ slackメッセージとして送るので、絵文字や改行を適切に入れ
     }
   }
 
-  private async callClaudeWithTools(
-    systemPrompt: string,
-    userPrompt: string,
-    tools: Array<{ name: string; description?: string; inputSchema: Record<string, unknown> }>,
-  ): Promise<{ task_report: string }> {
-    const apiKey = this.config.anthropicApiKey;
-    if (!apiKey) {
-      throw new Error('ANTHROPIC_API_KEY is required for task execution with Anthropic provider');
+  private async callClaudeWithMCP(systemPrompt: string, userPrompt: string): Promise<{ task_report: string }> {
+    if (!this.config.zapierMcpApiKey) {
+      throw new Error('ZAPIER_MCP_API_KEY is required for task execution');
     }
 
-    const anthropic = new Anthropic({
-      apiKey,
+    // Anthropic公式のMCP統合を使用
+    const response = await this.anthropic.beta.messages.create({
+      model: 'claude-4-5-haiku-20250514',
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [
+        {
+          role: 'user',
+          content: userPrompt,
+        },
+      ],
+      mcp_servers: [
+        {
+          type: 'url',
+          url: this.config.zapierMcpUrl || 'https://mcp.zapier.com/api/mcp/mcp',
+          name: 'zapier',
+          authorization_token: this.config.zapierMcpApiKey,
+        },
+      ],
+      betas: ['mcp-client-2025-04-04'],
+      temperature: 0.3,
     });
 
-    // Anthropic Tool Use フォーマットに変換
-    const claudeTools: Anthropic.Tool[] = tools.map((tool) => ({
-      name: tool.name,
-      description: tool.description || '',
-      input_schema: tool.inputSchema as Anthropic.Tool.InputSchema,
-    }));
+    console.log(`[executor] Claude response (stop_reason: ${response.stop_reason})`);
 
-    const messages: Anthropic.MessageParam[] = [
-      {
-        role: 'user',
-        content: userPrompt,
-      },
-    ];
+    // 最終応答を取得
+    const textBlocks = response.content.filter((block): block is Anthropic.TextBlock => block.type === 'text');
 
-    let iteration = 0;
-    const maxIterations = 5; // 無限ループ防止
+    if (textBlocks.length > 0) {
+      const content = textBlocks[0].text;
 
-    while (iteration < maxIterations) {
-      iteration++;
+      try {
+        const parsed = JSON.parse(content);
+        const validated = executionResponseSchema.parse(parsed);
 
-      const response = await anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 4096,
-        system: systemPrompt,
-        messages,
-        tools: claudeTools,
-        temperature: 0.3,
-      });
-
-      console.log(`[executor] Claude response (stop_reason: ${response.stop_reason})`);
-
-      // ツール使用がある場合
-      if (response.stop_reason === 'tool_use') {
-        const toolUseBlocks = response.content.filter(
-          (block): block is Anthropic.ToolUseBlock => block.type === 'tool_use',
-        );
-
-        console.log(`[executor] Claude requested ${toolUseBlocks.length} tool call(s)`);
-
-        // アシスタントの応答を追加
-        messages.push({
-          role: 'assistant',
-          content: response.content,
-        });
-
-        // ツール実行結果を収集
-        const toolResults: Anthropic.ToolResultBlockParam[] = [];
-
-        for (const toolUseBlock of toolUseBlocks) {
-          const toolName = toolUseBlock.name;
-          const toolArgs = toolUseBlock.input as Record<string, unknown>;
-
-          console.log(`[executor] Calling MCP tool: ${toolName}`, toolArgs);
-
-          try {
-            const toolResult = await this.mcpClient.callTool(toolName, toolArgs);
-
-            toolResults.push({
-              type: 'tool_result',
-              tool_use_id: toolUseBlock.id,
-              content: JSON.stringify(toolResult),
-            });
-          } catch (toolError) {
-            console.error(`[executor] Tool call failed:`, toolError);
-
-            toolResults.push({
-              type: 'tool_result',
-              tool_use_id: toolUseBlock.id,
-              content: JSON.stringify({
-                error: (toolError as Error).message,
-              }),
-              is_error: true,
-            });
-          }
-        }
-
-        // ツール実行結果を追加
-        messages.push({
-          role: 'user',
-          content: toolResults,
-        });
-
-        // 次のイテレーションへ
-        continue;
+        return validated;
+      } catch (parseError) {
+        // JSON形式でない場合、そのままレポートとして使用
+        return {
+          task_report: content,
+        };
       }
-
-      // 最終応答を取得
-      if (response.stop_reason === 'end_turn') {
-        const textBlocks = response.content.filter(
-          (block): block is Anthropic.TextBlock => block.type === 'text',
-        );
-
-        if (textBlocks.length > 0) {
-          const content = textBlocks[0].text;
-
-          try {
-            const parsed = JSON.parse(content);
-            const validated = executionResponseSchema.parse(parsed);
-
-            return validated;
-          } catch (parseError) {
-            // JSON形式でない場合、そのままレポートとして使用
-            return {
-              task_report: content,
-            };
-          }
-        }
-      }
-
-      // その他の停止理由の場合、エラー
-      break;
     }
 
     throw new Error('Task execution did not produce a valid result');

@@ -26,7 +26,7 @@ cp .env.example .env  # 必要に応じて作成
 以下のいずれかを選択：
 
 - **OpenRouter**: `OPENROUTER_API_KEY` + `TASK_MODEL_PROVIDER="openrouter"` + `TASK_MODEL_ID="x-ai/grok-4-fast"`
-- **OpenAI**: `OPENAI_API_KEY` + `TASK_MODEL_PROVIDER="openai"` + `TASK_MODEL_ID="gpt-4o-mini"`
+- **OpenAI**: `OPENAI_API_KEY` + `TASK_MODEL_PROVIDER="openai"` + `TASK_MODEL_ID="gpt-4-turbo-2024-04-09"` (推奨: GPT-4 Turbo)
 - **Anthropic**: `ANTHROPIC_API_KEY` + `TASK_MODEL_PROVIDER="anthropic"` + `TASK_MODEL_ID="claude-3-5-sonnet-20241022"`
 
 ### タスク実行機能 (オプション)
@@ -39,12 +39,15 @@ cp .env.example .env  # 必要に応じて作成
 
 #### Zapier MCP API キーの取得方法
 1. [Zapier MCP 設定ページ](https://mcp.zapier.com/) にアクセス
-2. **Claude Code** タブを選択
+2. **Anthropic API MCP Server** タブを選択（プログラム用）
 3. 表示される API キーをコピー
 4. 環境変数 `ZAPIER_MCP_API_KEY` に設定
 
+**注意**: Claude Code用やclaude.ai用のAPIキーではなく、**Anthropic API MCP Server**のキーを使用してください。
+
 タスク実行機能を使用すると：
-- 抽出されたタスクが **Claude 3.5 Sonnet** により自動的に実行されます
+- 抽出されたタスクが **Claude 4.5 Haiku** により自動的に実行されます
+- Anthropic公式のMCP統合機能を使用してZapier MCPに接続
 - Zapier MCP 経由で **Gmail 下書き作成、検索、Google Calendar、Notion** などが可能
 - 実行結果が Slack に詳細レポートとして投稿されます
 
@@ -86,10 +89,10 @@ Limitless API → タスク抽出 (LLM) → Slack 通知
 
 ### タスク実行機能有効時
 ```
-Limitless API → タスク抽出 (LLM) → タスク実行エージェント (Claude 3.5 + Zapier MCP) → Slack レポート通知
+Limitless API → タスク抽出 (GPT-4 Turbo) → タスク実行エージェント (Claude 4.5 Haiku + Zapier MCP) → Slack レポート通知
 ```
 
-Claude 3.5 Sonnetが利用可能な28個のツールを使ってタスクを自動実行します。
+Claude 4.5 HaikuがAnthropic公式のMCP統合を使用し、利用可能な28個のツールを使ってタスクを自動実行します。
 
 ## 今後の TODO
 - ブラウザ操作ツールの追加 (browser_use など)

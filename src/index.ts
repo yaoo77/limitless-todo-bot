@@ -3,7 +3,6 @@ import process from 'node:process';
 import cron from 'node-cron';
 
 import { fetchLifelogs } from './clients/limitless.js';
-import { MCPClient } from './clients/mcpClient.js';
 import { loadConfig } from './config.js';
 import {
   getLatestEndTime,
@@ -17,7 +16,6 @@ import { extractTasksFromLifelogs } from './services/taskExtractor.js';
 import { computeTaskHash } from './utils/hash.js';
 
 const config = loadConfig();
-let mcpClient: MCPClient | null = null;
 let taskExecutor: TaskExecutor | null = null;
 
 async function processOnce(): Promise<void> {
@@ -166,24 +164,21 @@ async function main() {
       zapierMcpUrl: config.zapierMcpUrl ? 'SET' : 'NOT SET',
       zapierMcpApiKey: config.zapierMcpApiKey ? 'SET' : 'NOT SET',
     });
-    console.log('[bootstrap] Version: 1.0.1 - MCP Integration with Claude 3.5 Sonnet (20241022)');
+    console.log('[bootstrap] Version: 1.0.2 - Anthropic MCP Integration with Claude Haiku 4.5');
 
-    // MCPクライアントの初期化（タスク実行が有効な場合）
+    // タスク実行エージェントの初期化
     if (config.enableTaskExecution) {
-      console.log('[bootstrap] Initializing MCP client...');
-
-      if (!config.zapierMcpUrl) {
-        throw new Error('ZAPIER_MCP_URL is required when ENABLE_TASK_EXECUTION is true');
-      }
+      console.log('[bootstrap] Initializing task executor...');
 
       if (!config.zapierMcpApiKey) {
         throw new Error('ZAPIER_MCP_API_KEY is required when ENABLE_TASK_EXECUTION is true');
       }
 
-      mcpClient = new MCPClient(config.zapierMcpUrl, config.zapierMcpApiKey);
-      await mcpClient.connect();
+      if (!config.anthropicApiKey) {
+        throw new Error('ANTHROPIC_API_KEY is required when ENABLE_TASK_EXECUTION is true');
+      }
 
-      taskExecutor = new TaskExecutor(config, mcpClient);
+      taskExecutor = new TaskExecutor(config);
       console.log('[bootstrap] Task executor initialized');
     }
 
@@ -227,10 +222,6 @@ async function main() {
 }
 
 async function shutdown() {
-  if (mcpClient) {
-    await mcpClient.disconnect();
-  }
-
   const { pool } = await import('./db/client.js');
   await pool.end();
 }
