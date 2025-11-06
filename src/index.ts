@@ -100,30 +100,40 @@ async function processOnce(): Promise<void> {
       try {
         const result = await taskExecutor.executeTask(todoTask);
 
-        // 実行結果をSlackに通知
-        await sendTasksToSlack(
-          [todoTask],
-          config,
-          {
-            latestEndTime: latestEndTime?.toISOString() ?? null,
-            totalTasks: 1,
-            executionReport: result.report,
-          },
-        );
+        // 実行不可能なタスク（ツール不足エラー）の場合、Slack通知をスキップ
+        const isToolUnavailableError =
+          result.report.includes('適切なツールが利用できません') ||
+          result.report.includes('現在のところこのタスクを実行するための') ||
+          result.report.includes('実行できませんでした');
+
+        if (isToolUnavailableError) {
+          console.log(`[processor] Task cannot be executed (no suitable tools), skipping Slack notification`);
+        } else {
+          // 実行結果をSlackに通知（成功した場合のみ）
+          await sendTasksToSlack(
+            [todoTask],
+            config,
+            {
+              latestEndTime: latestEndTime?.toISOString() ?? null,
+              totalTasks: 1,
+              executionReport: result.report,
+            },
+          );
+        }
 
         // 処理済みとして記録
         await recordProcessedTask(lifelogId, hash, task, timestamp);
       } catch (error) {
         console.error(`[processor] Task execution error:`, error);
 
-        // エラーでも通知は送る
+        // システムエラーの場合のみ通知（簡潔に）
         await sendTasksToSlack(
           [todoTask],
           config,
           {
             latestEndTime: latestEndTime?.toISOString() ?? null,
             totalTasks: 1,
-            executionReport: `エラー: ${(error as Error).message}`,
+            executionReport: `❌ タスク実行エラー\n${(error as Error).message.slice(0, 200)}`,
           },
         );
 
