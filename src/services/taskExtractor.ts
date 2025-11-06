@@ -16,7 +16,7 @@ const responseSchema = z.object({
       z.object({
         lifelogId: z.string().min(1),
         task: z.string().min(1),
-        timestamp: z.string().min(1),
+        timestamp: z.string().optional(), // LLMが提供しない場合に備えてオプション化
       }),
     )
     .default([]),
@@ -166,7 +166,25 @@ NG: 情報を共有する
   }
 
   const parsedTasks = responseSchema.parse(parsedJson);
-  return parsedTasks.tasks;
+
+  // timestampが欠けているタスクに、対応するlifelogのendTimeを補完
+  const tasksWithTimestamp = parsedTasks.tasks.map((task) => {
+    if (task.timestamp) {
+      return task as TodoTask; // timestampが既に存在する場合はそのまま使用
+    }
+
+    // lifelogIdに対応するlifelogを見つける
+    const lifelog = lifelogs.find((log) => log.id === task.lifelogId);
+    const timestamp = lifelog?.endTime || new Date().toISOString();
+
+    return {
+      lifelogId: task.lifelogId,
+      task: task.task,
+      timestamp,
+    } as TodoTask;
+  });
+
+  return tasksWithTimestamp;
 }
 
 function sanitizeJsonOutput(content: string): string {
